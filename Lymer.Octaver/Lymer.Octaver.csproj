@@ -43,8 +43,13 @@
     <Reference Include="Jacobi.Vst.Interop">
       <HintPath>..\packages\VST.NET.x86.1.1\lib\net40\Jacobi.Vst.Interop.dll</HintPath>
     </Reference>
+    <Reference Include="MathNet.Numerics, Version=3.8.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\MathNet.Numerics.3.8.0\lib\net40\MathNet.Numerics.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AudioProcessor.cs" />

@@ -16,7 +16,7 @@ namespace Lymer.Octaver
             var inChannel = inChannels[0];
             var outChannel = outChannels[0];
             
-            for (int i = 1; i < inChannel.SampleCount; i++)
+            for (var i = 0; i < inChannel.SampleCount; i++)
             {
                 outChannel[i] = inChannel[i];
             }
