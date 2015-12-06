@@ -8,6 +8,8 @@ namespace Lymer.Octaver.Tests
         [TestFixture]
         public class WhenTellingSignalGeneratorToGetSample
         {
+            private static readonly double Delta = Math.Pow(0.1D, 14);
+
             [Test]
             [TestCase(1d, 0.0D)]
             [TestCase(1d, 0.5D)]
@@ -23,7 +25,7 @@ namespace Lymer.Octaver.Tests
             {
                 var sample = SignalGenerator.GetSample(frequency, offset);
 
-                Assert.LessOrEqual(Math.Abs(sample), Math.Pow(0.1D, 14));
+                Assert.AreEqual(0, sample, Delta);
             }
 
             [Test]
@@ -35,7 +37,7 @@ namespace Lymer.Octaver.Tests
             {
                 var sample = SignalGenerator.GetSample(frequency, offset);
 
-                Assert.GreaterOrEqual(sample, 1D - Math.Pow(0.1D, 14));                
+                Assert.AreEqual(1, sample, Delta);                
             }
 
             [Test]
@@ -47,7 +49,7 @@ namespace Lymer.Octaver.Tests
             {
                 var sample = SignalGenerator.GetSample(frequency, offset);
 
-                Assert.LessOrEqual(sample, -1D + Math.Pow(0.1D, 14));
+                Assert.AreEqual(-1, sample, Delta);
             }
         }
     }
