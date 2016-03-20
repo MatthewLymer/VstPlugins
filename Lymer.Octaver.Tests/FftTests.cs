@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Security.Cryptography;
 using MathNet.Numerics.IntegralTransforms;
 using NUnit.Framework;
 
@@ -64,7 +65,7 @@ namespace Lymer.Octaver.Tests
 
             for (var i = 0; i < numberOfSamples; i++)
             {
-                yield return signalFrequencies.Sum(x => Math.Sin(samplingPeriod*i*radiansPerPhase*x) * 0.5);
+                yield return signalFrequencies.Sum(x => Math.Sin(samplingPeriod*i*radiansPerPhase*x));
             }
         }
     }
