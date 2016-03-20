@@ -8,6 +8,7 @@ namespace VisualGraph
 {
     public partial class Form1 : Form
     {
+        private static readonly double[] SignalFrequencies = { 440 };
         private const int SamplingFrequency = 44100;
         private const int NumberOfSamples = 128;
         private const double RadiansPerPhase = Math.PI * 2;
@@ -27,7 +28,7 @@ namespace VisualGraph
             dry.ChartType = SeriesChartType.Line;
             wet.ChartType = SeriesChartType.Line;
 
-            var drySamples = GenerateSamples(new[] { 880d}, SamplingFrequency, NumberOfSamples).ToArray();
+            var drySamples = GenerateSamples(SignalFrequencies, SamplingFrequency, NumberOfSamples).ToArray();
 
             for (var i = 0; i < drySamples.Length; i++)
             {
@@ -38,7 +39,7 @@ namespace VisualGraph
 
             var wetSamples = drySamples.Select(x => (float) x.YValues[0]).ToArray();
 
-            PitchShifter.PitchShift(1, NumberOfSamples, SamplingFrequency, wetSamples);
+            PitchShifter.PitchShift(1f, NumberOfSamples, SamplingFrequency, wetSamples);
             
             for (var i = 0; i < wetSamples.Length; i++)
             {
@@ -53,7 +54,7 @@ namespace VisualGraph
             for (var i = 0; i < numberOfSamples; i++)
             {
                 var xValue = samplingPeriod * i;
-                var yValue = signalFrequencies.Sum(x => Math.Sin(xValue * RadiansPerPhase * x) /*+ Math.Sin(xValue * RadiansPerPhase * x * 2)*/);
+                var yValue = signalFrequencies.Sum(x => Math.Sin(xValue * RadiansPerPhase * x));
                 yield return new DataPoint(xValue, yValue);
             }
         }

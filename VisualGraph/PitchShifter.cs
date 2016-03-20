@@ -46,11 +46,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace VisualGraph
 {
     public class PitchShifter
     {
+        private const int SampleRate = 44100;
+
         private const int MaxFrameLength = 2048;
         private static readonly float[] InFifo = new float[MaxFrameLength];
         private static readonly float[] OutFifo = new float[MaxFrameLength];
@@ -66,26 +69,129 @@ namespace VisualGraph
         public static void PitchShift(float pitchShift, int numSampsToProcess,
             int sampleRate, float[] indata)
         {
-            const int fftFrameSize = 128;
+            PitchShift2(pitchShift, numSampsToProcess, 10, sampleRate, indata);
+        }
 
-            var data = new float[indata.Length * 2];
+        private static void PitchShift2(float pitchShift, int numSampsToProcess, int sampleOverlap, int sampleRate, IList<float> data)
+        {
+            var fftBuffer = data.Zip(
+                Enumerable.Repeat(0f, data.Count), 
+                (real, imaginary) => new Complex(real, imaginary)).ToArray();
 
-            for (var i = 0; i < indata.Length; i++)
+            ShortTimeFourierTransform(fftBuffer, FftDirection.Forward);
+
+            var bins = CalculateBins(SampleRate, fftBuffer);
+
+            var shiftedBins = PitchShiftBins(pitchShift, bins);
+
+            var newBuffer = SynthesizeFft(SampleRate, shiftedBins);
+            
+            ShortTimeFourierTransform(newBuffer, FftDirection.Inverse);
+
+            for (var i = 0; i < fftBuffer.Length; i++)
             {
-                data[i * 2] = indata[i];
-                data[i * 2 + 1] = 0f;
+                var tmp = newBuffer[i].Real/newBuffer.Length;
+                data[i] = (tmp - 0.0730070248f) * 2; // wtf?
+            }
+        }
+
+        private static Complex[] SynthesizeFft(int sampleRate, Bin[] bins)
+        {
+            const float expectedPhaseDifference = (float) (2*Math.PI);
+            var fftBuffer = new Complex[bins.Length * 2];
+            var frequencyPerBin = sampleRate / (float)fftBuffer.Length;
+
+            var phase = 0f;
+            
+            for (var i = 0; i < bins.Length; i++)
+            {
+                var tmp = bins[i].Frequency;
+
+                tmp -= i*frequencyPerBin;
+
+                tmp /= frequencyPerBin;
+
+                tmp *= (float) (2*Math.PI);
+
+                tmp += i*expectedPhaseDifference;
+
+                phase += tmp;
+
+                fftBuffer[i] = new Complex((float)(bins[i].Magnitude * Math.Cos(phase)), (float)(bins[i].Magnitude * Math.Sin(phase)));
             }
 
-            ShortTimeFourierTransform(data, fftFrameSize, -1);
-
-            ShortTimeFourierTransform(data, fftFrameSize, 1);
-
-            for (var i = 0; i < indata.Length; i++)
+            for (var i = bins.Length; i < fftBuffer.Length; i++)
             {
-                indata[i] = data[i * 2] / fftFrameSize;
+                fftBuffer[i] = new Complex(0f, 0f);
             }
 
-            // PitchShift(pitchShift, numSampsToProcess, 512, 10, sampleRate, indata);
+            return fftBuffer;
+        }
+
+        private static Bin[] PitchShiftBins(float pitchShift, Bin[] bins)
+        {
+            var shiftedBins = new Bin[bins.Length];
+
+            for (var i = 0; i < shiftedBins.Length; i++)
+            {
+                shiftedBins[i] = new Bin(0f, 0f);
+            }
+
+            for (var i = 0; i < bins.Length; i++)
+            {
+                var index = (int)(i * pitchShift); 
+
+                if (index < bins.Length)
+                {
+                    shiftedBins[index].Magnitude += bins[i].Magnitude;
+                    shiftedBins[index].Frequency = bins[i].Frequency * pitchShift; 
+                }
+            }
+
+            return shiftedBins;
+        }
+
+        private static Bin[] CalculateBins(int sampleRate, IList<Complex> fftBuffer)
+        {
+            const float expectedPhaseDifference = (float) (2*Math.PI);
+
+            var frequencyPerBin = sampleRate / (float) fftBuffer.Count;
+            var lastPhase = 0f;
+            var bins = new Bin[fftBuffer.Count/2];
+
+            for (var i = 0; i < bins.Length; i++)
+            {
+                var magnitude = CalculateMagnitude(fftBuffer[i]);
+                var phase = CalculatePhase(fftBuffer[i]);
+
+                var tmp = phase - lastPhase;
+                lastPhase = phase;
+
+                tmp -= i*expectedPhaseDifference;
+
+                var qpd = (long) (tmp/Math.PI);
+                if (qpd >= 0) qpd += qpd & 1;
+                else qpd -= qpd & 1;
+                tmp -= (float) (Math.PI*qpd);
+
+                tmp /= expectedPhaseDifference;
+
+                tmp = i*frequencyPerBin + tmp*frequencyPerBin;
+                
+                bins[i] = new Bin(tmp, magnitude);
+            }
+
+            return bins;
+        }
+
+        private static float CalculatePhase(Complex c)
+        {
+            return (float)Math.Atan2(c.Imaginary, c.Real);
+        }
+
+        private static float CalculateMagnitude(Complex c)
+        {
+            return (float)Math.Sqrt(c.Real * c.Real + c.Imaginary * c.Imaginary);
         }
 
         public static void PitchShift(float pitchShift, int numSampsToProcess, int fftFrameSize,
@@ -236,6 +342,18 @@ namespace VisualGraph
             }
         }
 
+        private static void ShortTimeFourierTransform(IList<Complex> fftBuffer, FftDirection fftDirection)
+        {
+            var buffer = fftBuffer.Select(x => new[] {x.Real, x.Imaginary}).SelectMany(x => x).ToArray();
+
+            ShortTimeFourierTransform(buffer, fftBuffer.Count, fftDirection == FftDirection.Forward ? -1 : 1);
+
+            for (var i = 0; i < fftBuffer.Count; i++)
+            {
+                fftBuffer[i] = new Complex(buffer[i*2], buffer[i*2+1]);
+            }
+        }
+
         private static void ShortTimeFourierTransform(IList<float> fftBuffer, int fftFrameSize, int sign)
         {
             for (var i = 2; i < 2 * fftFrameSize - 2; i += 2)
@@ -294,5 +412,46 @@ namespace VisualGraph
         {
             return -0.5f * (float)Math.Cos(2.0 * Math.PI * interpolation) + 0.5f;
         }
+    }
+
+    internal class Complex
+    {
+        public Complex(float real, float imaginary)
+        {
+            Real = real;
+            Imaginary = imaginary;
+        }
+
+        public float Real { get; }
+        public float Imaginary { get; }
+
+        public override string ToString()
+        {
+            return $"({Real}, {Imaginary})";
+        }
+    }
+
+    internal class Bin
+    {
+        public Bin(float frequency, float magnitude)
+        {
+            Frequency = frequency;
+            Magnitude = magnitude;
+        }
+
+        public float Frequency { get; set; }
+        public float Magnitude { get; set; }
+
+        public override string ToString()
+        {
+            return $"({Frequency}hz, {Magnitude})";
+        }
+    }
+
+
+    internal enum FftDirection
+    {
+        Forward,
+        Inverse
     }
 }
