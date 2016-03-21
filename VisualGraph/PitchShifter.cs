@@ -77,10 +77,12 @@ namespace VisualGraph
             var fftBuffer = data.Zip(
                 Enumerable.Repeat(0f, data.Count), 
                 (real, imaginary) => new Complex(real, imaginary)).ToArray();
-
+            
             ShortTimeFourierTransform(fftBuffer, FftDirection.Forward);
 
             var bins = CalculateBins(SampleRate, fftBuffer);
+
+            var dcOffset = bins[0].Magnitude / fftBuffer.Length;
 
             var shiftedBins = PitchShiftBins(pitchShift, bins);
 
@@ -88,10 +90,12 @@ namespace VisualGraph
             
             ShortTimeFourierTransform(newBuffer, FftDirection.Inverse);
 
+            var factor = (newBuffer.Length / 2f);
+
             for (var i = 0; i < fftBuffer.Length; i++)
             {
-                var tmp = newBuffer[i].Real/newBuffer.Length;
-                data[i] = (tmp - 0.0730070248f) * 2; // wtf?
+                var tmp = newBuffer[i].Real / factor;
+                data[i] = tmp - dcOffset;
             }
         }
 
@@ -102,7 +106,7 @@ namespace VisualGraph
             var frequencyPerBin = sampleRate / (float)fftBuffer.Length;
 
             var phase = 0f;
-            
+          
             for (var i = 0; i < bins.Length; i++)
             {
                 var tmp = bins[i].Frequency;
@@ -117,7 +121,10 @@ namespace VisualGraph
 
                 phase += tmp;
 
-                fftBuffer[i] = new Complex((float)(bins[i].Magnitude * Math.Cos(phase)), (float)(bins[i].Magnitude * Math.Sin(phase)));
+                var real = (float)(bins[i].Magnitude * Math.Cos(phase));
+                var imaginary = (float)(bins[i].Magnitude * Math.Sin(phase));
+
+                fftBuffer[i] = new Complex(real, imaginary);
             }
 
             for (var i = bins.Length; i < fftBuffer.Length; i++)
@@ -139,12 +146,12 @@ namespace VisualGraph
 
             for (var i = 0; i < bins.Length; i++)
             {
-                var index = (int)(i * pitchShift); 
+                var index = (int)(i * pitchShift);
 
                 if (index < bins.Length)
                 {
                     shiftedBins[index].Magnitude += bins[i].Magnitude;
-                    shiftedBins[index].Frequency = bins[i].Frequency * pitchShift; 
+                    shiftedBins[index].Frequency = bins[i].Frequency * pitchShift;
                 }
             }
 
@@ -157,7 +164,7 @@ namespace VisualGraph
 
             var frequencyPerBin = sampleRate / (float) fftBuffer.Count;
             var lastPhase = 0f;
-            var bins = new Bin[fftBuffer.Count/2];
+            var bins = new Bin[fftBuffer.Count / 2];
 
             for (var i = 0; i < bins.Length; i++)
             {

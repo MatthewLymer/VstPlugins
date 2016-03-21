@@ -8,10 +8,11 @@ namespace VisualGraph
 {
     public partial class Form1 : Form
     {
-        private static readonly double[] SignalFrequencies = { 440 };
+        private static readonly double[] SignalFrequencies = { 440, 220, 110 };
         private const int SamplingFrequency = 44100;
-        private const int NumberOfSamples = 128;
+        private const int NumberOfSamples = 512;
         private const double RadiansPerPhase = Math.PI * 2;
+        private const float PitchShiftAmount = 1f;
 
         public Form1()
         {
@@ -39,7 +40,7 @@ namespace VisualGraph
 
             var wetSamples = drySamples.Select(x => (float) x.YValues[0]).ToArray();
 
-            PitchShifter.PitchShift(1f, NumberOfSamples, SamplingFrequency, wetSamples);
+            PitchShifter.PitchShift(PitchShiftAmount, NumberOfSamples, SamplingFrequency, wetSamples);
             
             for (var i = 0; i < wetSamples.Length; i++)
             {
@@ -54,7 +55,7 @@ namespace VisualGraph
             for (var i = 0; i < numberOfSamples; i++)
             {
                 var xValue = samplingPeriod * i;
-                var yValue = signalFrequencies.Sum(x => Math.Sin(xValue * RadiansPerPhase * x));
+                var yValue = signalFrequencies.Sum(x => Math.Sin(xValue * RadiansPerPhase * x) * (1f / signalFrequencies.Length));
                 yield return new DataPoint(xValue, yValue);
             }
         }
