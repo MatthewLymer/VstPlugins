@@ -94,16 +94,15 @@ namespace VisualGraph
 
             for (var i = 0; i < fftBuffer.Length; i++)
             {
-                var tmp = newBuffer[i].Real / factor;
-                data[i] = tmp - dcOffset;
+                data[i] = newBuffer[i].Real / factor - dcOffset;
             }
         }
 
-        private static Complex[] SynthesizeFft(int sampleRate, Bin[] bins)
+        private static Complex[] SynthesizeFft(float sampleRate, Bin[] bins)
         {
             const float expectedPhaseDifference = (float) (2*Math.PI);
             var fftBuffer = new Complex[bins.Length * 2];
-            var frequencyPerBin = sampleRate / (float)fftBuffer.Length;
+            var frequencyPerBin = (sampleRate / (float)fftBuffer.Length);
 
             var phase = 0f;
           
@@ -137,25 +136,27 @@ namespace VisualGraph
 
         private static Bin[] PitchShiftBins(float pitchShift, Bin[] bins)
         {
-            var shiftedBins = new Bin[bins.Length];
+            return bins.Select(x => new Bin(x.Frequency*pitchShift, x.Magnitude)).ToArray();
+            
+            //var shiftedBins = new Bin[bins.Length];
 
-            for (var i = 0; i < shiftedBins.Length; i++)
-            {
-                shiftedBins[i] = new Bin(0f, 0f);
-            }
+            //for (var i = 0; i < shiftedBins.Length; i++)
+            //{
+            //    shiftedBins[i] = new Bin(0f, 0f);
+            //}
 
-            for (var i = 0; i < bins.Length; i++)
-            {
-                var index = (int)(i * pitchShift);
+            //for (var i = 0; i < bins.Length; i++)
+            //{
+            //    var index = (int)(i * pitchShift);
 
-                if (index < bins.Length)
-                {
-                    shiftedBins[index].Magnitude += bins[i].Magnitude;
-                    shiftedBins[index].Frequency = bins[i].Frequency * pitchShift;
-                }
-            }
+            //    if (index < bins.Length)
+            //    {
+            //        shiftedBins[i].Magnitude = bins[i].Magnitude;
+            //        shiftedBins[i].Frequency = bins[i].Frequency * pitchShift;
+            //    }
+            //}
 
-            return shiftedBins;
+            //return shiftedBins;
         }
 
         private static Bin[] CalculateBins(int sampleRate, IList<Complex> fftBuffer)

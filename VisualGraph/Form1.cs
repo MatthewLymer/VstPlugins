@@ -8,19 +8,16 @@ namespace VisualGraph
 {
     public partial class Form1 : Form
     {
-        private static readonly double[] SignalFrequencies = { 440, 220, 110 };
+        private static readonly double[] SignalFrequencies = { 440 };
         private const int SamplingFrequency = 44100;
         private const int NumberOfSamples = 512;
         private const double RadiansPerPhase = Math.PI * 2;
-        private const float PitchShiftAmount = 1f;
+        private const float PitchShiftAmount = 0.95f;
 
         public Form1()
         {
             InitializeComponent();
-        }
 
-        private void Form1_Load(object sender, EventArgs e)
-        {
             chart1.Series.Clear();
 
             var dry = chart1.Series.Add("dry");
@@ -38,10 +35,10 @@ namespace VisualGraph
                 // dry.Points.Add(sample);                
             }
 
-            var wetSamples = drySamples.Select(x => (float) x.YValues[0]).ToArray();
+            var wetSamples = drySamples.Select(x => (float)x.YValues[0]).ToArray();
 
             PitchShifter.PitchShift(PitchShiftAmount, NumberOfSamples, SamplingFrequency, wetSamples);
-            
+
             for (var i = 0; i < wetSamples.Length; i++)
             {
                 wet.Points.AddXY(i, wetSamples[i]);
