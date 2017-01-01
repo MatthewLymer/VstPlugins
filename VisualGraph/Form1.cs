@@ -8,11 +8,10 @@ namespace VisualGraph
 {
     public partial class Form1 : Form
     {
-        private static readonly double[] SignalFrequencies = { 440 };
+        private static readonly double[] SignalFrequencies = { 256 };
         private const int SamplingFrequency = 44100;
         private const int NumberOfSamples = 512;
-        private const double RadiansPerPhase = Math.PI * 2;
-        private const float PitchShiftAmount = 0.95f;
+        private const float PitchShiftAmount = 0.5f;
 
         public Form1()
         {
@@ -30,18 +29,20 @@ namespace VisualGraph
 
             for (var i = 0; i < drySamples.Length; i++)
             {
-                dry.Points.AddXY(i, drySamples[i].YValues[0]);
-
-                // dry.Points.Add(sample);                
+                dry.Points.AddXY(i, drySamples[i].YValues[0]);       
             }
 
-            var wetSamples = drySamples.Select(x => (float)x.YValues[0]).ToArray();
+            var firstWetSamples = drySamples.Select(x => (float)x.YValues[0]).Take(NumberOfSamples / 2).ToArray();
+            var secondWetSamples = drySamples.Select(x => (float)x.YValues[0]).Skip(NumberOfSamples / 2).ToArray();
 
-            PitchShifter.PitchShift(PitchShiftAmount, NumberOfSamples, SamplingFrequency, wetSamples);
+            PitchShifter.PitchShift(PitchShiftAmount, SamplingFrequency, firstWetSamples);
+            PitchShifter.PitchShift(PitchShiftAmount, SamplingFrequency, secondWetSamples);
 
-            for (var i = 0; i < wetSamples.Length; i++)
+            var allWetSamples = firstWetSamples.Concat(secondWetSamples).ToArray();
+
+            for (var i = 0; i < allWetSamples.Length; i++)
             {
-                wet.Points.AddXY(i, wetSamples[i]);
+                wet.Points.AddXY(i, allWetSamples[i]);
             }
         }
 
@@ -52,7 +53,7 @@ namespace VisualGraph
             for (var i = 0; i < numberOfSamples; i++)
             {
                 var xValue = samplingPeriod * i;
-                var yValue = signalFrequencies.Sum(x => Math.Sin(xValue * RadiansPerPhase * x) * (1f / signalFrequencies.Length));
+                var yValue = signalFrequencies.Sum(f => Math.Sin(xValue * (Math.PI * 2) * f) * (1f / signalFrequencies.Length));
                 yield return new DataPoint(xValue, yValue);
             }
         }

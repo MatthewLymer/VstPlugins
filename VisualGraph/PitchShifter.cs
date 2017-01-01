@@ -52,61 +52,46 @@ namespace VisualGraph
 {
     public class PitchShifter
     {
-        private const int SampleRate = 44100;
-
-        private const int MaxFrameLength = 2048;
-        private static readonly float[] InFifo = new float[MaxFrameLength];
-        private static readonly float[] OutFifo = new float[MaxFrameLength];
-        private static readonly float[] FftWorkspace = new float[2 * MaxFrameLength];
-        private static readonly float[] LastPhase = new float[MaxFrameLength / 2 + 1];
-        private static readonly float[] SumPhase = new float[MaxFrameLength / 2 + 1];
-        private static readonly float[] OutputAccumilator = new float[2 * MaxFrameLength];
-        private static readonly float[] AnalyzedFrequency = new float[MaxFrameLength];
-        private static readonly float[] AnalyzedMagnitude = new float[MaxFrameLength];
-        private static readonly float[] SynthesizedFrequency = new float[MaxFrameLength];
-        private static readonly float[] SynthesizedMagnitude = new float[MaxFrameLength];
-
-        public static void PitchShift(float pitchShift, int numSampsToProcess,
-            int sampleRate, float[] indata)
+        public static void PitchShift(float pitchShift, int sampleRate, float[] indata)
         {
-            PitchShift2(pitchShift, numSampsToProcess, 10, sampleRate, indata);
-        }
+            if (!IsPowerOfTwo(indata.Length))
+            {
+                throw new ArgumentException(@"indata must be a power of two", nameof(indata));
+            }
 
-        private static void PitchShift2(float pitchShift, int numSampsToProcess, int sampleOverlap, int sampleRate, IList<float> data)
-        {
-            var fftBuffer = data.Zip(
-                Enumerable.Repeat(0f, data.Count), 
+            var fftBuffer = indata.Zip(
+                Enumerable.Repeat(0f, indata.Length), 
                 (real, imaginary) => new Complex(real, imaginary)).ToArray();
             
             ShortTimeFourierTransform(fftBuffer, FftDirection.Forward);
 
-            var bins = CalculateBins(SampleRate, fftBuffer);
+            var bins = CalculateBins(sampleRate, fftBuffer);
 
             var dcOffset = bins[0].Magnitude / fftBuffer.Length;
 
             var shiftedBins = PitchShiftBins(pitchShift, bins);
 
-            var newBuffer = SynthesizeFft(SampleRate, shiftedBins);
+            var newBuffer = SynthesizeFft(sampleRate, shiftedBins);
             
             ShortTimeFourierTransform(newBuffer, FftDirection.Inverse);
 
-            var factor = (newBuffer.Length / 2f);
+            var factor = newBuffer.Length / 2;
 
             for (var i = 0; i < fftBuffer.Length; i++)
             {
-                data[i] = newBuffer[i].Real / factor - dcOffset;
+                indata[i] = newBuffer[i].Real / factor - dcOffset;
             }
         }
 
-        private static Complex[] SynthesizeFft(float sampleRate, Bin[] bins)
+        private static Complex[] SynthesizeFft(float sampleRate, IList<Bin> bins)
         {
             const float expectedPhaseDifference = (float) (2*Math.PI);
-            var fftBuffer = new Complex[bins.Length * 2];
-            var frequencyPerBin = (sampleRate / (float)fftBuffer.Length);
+            var fftBuffer = new Complex[bins.Count * 2];
+            var frequencyPerBin = sampleRate / fftBuffer.Length;
 
             var phase = 0f;
           
-            for (var i = 0; i < bins.Length; i++)
+            for (var i = 0; i < bins.Count; i++)
             {
                 var tmp = bins[i].Frequency;
 
@@ -126,7 +111,7 @@ namespace VisualGraph
                 fftBuffer[i] = new Complex(real, imaginary);
             }
 
-            for (var i = bins.Length; i < fftBuffer.Length; i++)
+            for (var i = bins.Count; i < fftBuffer.Length; i++)
             {
                 fftBuffer[i] = new Complex(0f, 0f);
             }
@@ -134,29 +119,24 @@ namespace VisualGraph
             return fftBuffer;
         }
 
-        private static Bin[] PitchShiftBins(float pitchShift, Bin[] bins)
+        private static Bin[] PitchShiftBins(float pitchShift, IList<Bin> bins)
         {
-            return bins.Select(x => new Bin(x.Frequency*pitchShift, x.Magnitude)).ToArray();
+            const int binFactor = 2;
+
+            var shiftedBins = new Bin[bins.Count * binFactor];
             
-            //var shiftedBins = new Bin[bins.Length];
+            for (var i = 0; i < bins.Count; i++)
+            {
+                var bin = bins[i];
+                shiftedBins[i] = new Bin(bin.Frequency * pitchShift, bin.Magnitude * binFactor);
+            }
 
-            //for (var i = 0; i < shiftedBins.Length; i++)
-            //{
-            //    shiftedBins[i] = new Bin(0f, 0f);
-            //}
+            for (var i = bins.Count; i < shiftedBins.Length; i++)
+            {
+                shiftedBins[i] = new Bin(0f, 0f);
+            }
 
-            //for (var i = 0; i < bins.Length; i++)
-            //{
-            //    var index = (int)(i * pitchShift);
-
-            //    if (index < bins.Length)
-            //    {
-            //        shiftedBins[i].Magnitude = bins[i].Magnitude;
-            //        shiftedBins[i].Frequency = bins[i].Frequency * pitchShift;
-            //    }
-            //}
-
-            //return shiftedBins;
+            return shiftedBins;
         }
 
         private static Bin[] CalculateBins(int sampleRate, IList<Complex> fftBuffer)
@@ -200,154 +180,6 @@ namespace VisualGraph
         private static float CalculateMagnitude(Complex c)
         {
             return (float)Math.Sqrt(c.Real * c.Real + c.Imaginary * c.Imaginary);
-        }
-
-        public static void PitchShift(float pitchShift, int numSampsToProcess, int fftFrameSize,
-            int sampleOverlap, int sampleRate, float[] indata)
-        {
-            var outdata = indata;
-            /* set up some handy variables */
-            var fftFrameSize2 = fftFrameSize / 2;
-            var stepSize = fftFrameSize / sampleOverlap;
-            var freqPerBin = sampleRate / (float)fftFrameSize;
-            var expct = 2.0 * Math.PI * stepSize / fftFrameSize;
-            var inFifoLatency = fftFrameSize - stepSize;
-            var rover = inFifoLatency;
-
-            /* main processing loop */
-            for (var i = 0; i < numSampsToProcess; i++)
-            {
-                /* As long as we have not yet collected enough data just read in */
-                InFifo[rover] = indata[i];
-                outdata[i] = OutFifo[rover - inFifoLatency];
-                rover++;
-
-                /* now we have enough data for processing */
-                if (rover >= fftFrameSize)
-                {
-                    rover = inFifoLatency;
-
-                    /* do windowing and re,im interleave */
-                    for (var k = 0; k < fftFrameSize; k++)
-                    {
-                        FftWorkspace[2 * k] = InFifo[k] * CalculateWindow(k / (float)fftFrameSize);
-                        FftWorkspace[2 * k + 1] = 0f;
-                    }
-                    
-                    /* ***************** ANALYSIS ******************* */
-                    /* do transform */
-                    ShortTimeFourierTransform(FftWorkspace, fftFrameSize, -1);
-
-                    /* this is the analysis step */
-                    double magn;
-                    double phase;
-                    double tmp;
-                    for (var k = 0; k <= fftFrameSize2; k++)
-                    {
-                        /* de-interlace FFT buffer */
-                        double real = FftWorkspace[2 * k];
-                        double imag = FftWorkspace[2 * k + 1];
-
-                        /* compute magnitude and phase */
-                        magn = 2.0 * Math.Sqrt(real * real + imag * imag);
-                        phase = Math.Atan2(imag, real);
-
-                        /* compute phase difference */
-                        tmp = phase - LastPhase[k];
-                        LastPhase[k] = (float)phase;
-
-                        /* subtract expected phase difference */
-                        tmp -= k * expct;
-
-                        /* map delta phase into +/- Pi interval */
-                        var qpd = (long)(tmp / Math.PI);
-                        if (qpd >= 0) qpd += qpd & 1;
-                        else qpd -= qpd & 1;
-                        tmp -= Math.PI * qpd;
-                        
-                        /* get deviation from bin frequency from the +/- Pi interval */
-                        tmp = sampleOverlap * tmp / (2.0 * Math.PI);
-
-                        /* compute the k-th partials' true frequency */
-                        tmp = k * freqPerBin + tmp * freqPerBin;
-
-                        /* store magnitude and true frequency in analysis arrays */
-                        AnalyzedMagnitude[k] = (float)magn;
-                        AnalyzedFrequency[k] = (float)tmp;
-                    }
-
-                    /* ***************** PROCESSING ******************* */
-                    /* this does the actual pitch shifting */
-                    for (var k = 0; k < fftFrameSize; k++)
-                    {
-                        SynthesizedMagnitude[k] = 0f;
-                        SynthesizedFrequency[k] = 0f;
-                    }
-
-                    for (var k = 0; k <= fftFrameSize2; k++)
-                    {
-                        var index = (int)(k * pitchShift);
-
-                        if (index <= fftFrameSize2)
-                        {
-                            SynthesizedMagnitude[index] += AnalyzedMagnitude[k];
-                            SynthesizedFrequency[index] = AnalyzedFrequency[k] * pitchShift;
-                        }
-                    }
-
-                    /* ***************** SYNTHESIS ******************* */
-                    /* this is the synthesis step */
-                    for (var k = 0; k <= fftFrameSize2; k++)
-                    {
-                        /* get magnitude and true frequency from synthesis arrays */
-                        magn = SynthesizedMagnitude[k];
-                        tmp = SynthesizedFrequency[k];
-
-                        /* subtract bin mid frequency */
-                        tmp -= k * freqPerBin;
-
-                        /* get bin deviation from freq deviation */
-                        tmp /= freqPerBin;
-
-                        /* take sampleOverlap into account */
-                        tmp = 2.0 * Math.PI * tmp / sampleOverlap;
-
-                        /* add the overlap phase advance back in */
-                        tmp += k * expct;
-
-                        /* accumulate delta phase to get bin phase */
-                        SumPhase[k] += (float)tmp;
-                        phase = SumPhase[k];
-
-                        /* get real and imag part and re-interleave */
-                        FftWorkspace[2 * k] = (float)(magn * Math.Cos(phase));
-                        FftWorkspace[2 * k + 1] = (float)(magn * Math.Sin(phase));
-                    }
-
-                    /* zero negative frequencies */
-                    for (var k = fftFrameSize + 2; k < 2 * fftFrameSize; k++) FftWorkspace[k] = 0.0F;
-
-                    /* do inverse transform */
-                    ShortTimeFourierTransform(FftWorkspace, fftFrameSize, 1);
-
-                    /* do windowing and add to output accumulator */
-                    for (var k = 0; k < fftFrameSize; k++)
-                    {
-                        var window = CalculateWindow(k / (float)fftFrameSize);
-                        OutputAccumilator[k] += 2 * window * FftWorkspace[2 * k] / (fftFrameSize2 * sampleOverlap);
-                    }
-                    for (var k = 0; k < stepSize; k++) OutFifo[k] = OutputAccumilator[k];
-
-                    /* shift accumulator */
-                    for (var k = 0; k < fftFrameSize; k++)
-                    {
-                        OutputAccumilator[k] = OutputAccumilator[k + stepSize];
-                    }
-
-                    /* move input FIFO */
-                    for (var k = 0; k < inFifoLatency; k++) InFifo[k] = InFifo[k + stepSize];
-                }
-            }
         }
 
         private static void ShortTimeFourierTransform(IList<Complex> fftBuffer, FftDirection fftDirection)
@@ -416,9 +248,9 @@ namespace VisualGraph
             }
         }
 
-        private static float CalculateWindow(float interpolation)
+        private static bool IsPowerOfTwo(int x)
         {
-            return -0.5f * (float)Math.Cos(2.0 * Math.PI * interpolation) + 0.5f;
+            return (x & (x - 1)) == 0;
         }
     }
 
@@ -439,7 +271,7 @@ namespace VisualGraph
         }
     }
 
-    internal class Bin
+    internal struct Bin
     {
         public Bin(float frequency, float magnitude)
         {
@@ -447,8 +279,8 @@ namespace VisualGraph
             Magnitude = magnitude;
         }
 
-        public float Frequency { get; set; }
-        public float Magnitude { get; set; }
+        public float Frequency { get; }
+        public float Magnitude { get; }
 
         public override string ToString()
         {
